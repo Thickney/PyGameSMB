@@ -48,14 +48,14 @@ class Entity:
         self.rect = Rect(self.x,self.y,self.w,self.h)
 
     def changeState (self, stateID):
-        if allStates.get(stateID) is None:
+        if self.allStates.get(stateID) is None:
             return
         else:
-            newState = allStates.get(stateID)
-            self.currState.exit(self)
+            self.newState = self.allStates.get(stateID)
+            self.currState.exitState(self)
             self.prevState = self.currState
             self.currState = self.newState
-            self.currState.enter(self)
+            self.currState.enterState(self)
 
     def draw (self):
         pygame.draw.rect(screen, self.color, [self.x,self.y,self.w,self.h], 6)
@@ -63,17 +63,19 @@ class Entity:
 
 # Mario
 class Mario (Entity):
-    
     def __init__ (self, x, y, w, h, color):
         Entity.__init__(self, x, y, w, h, color)
-        self.allStates = { "idle":MarioStateIdle(), "move":MarioStateMove() }
+        self.allStates = { "idle":MarioStateIdle(), "move":MarioStateMove(), "run":MarioStateRun(), "jump":MarioStateJump() }
         self.prevState = self.allStates.get("idle")
         self.currState = self.prevState
-        self.speed = 1
+        self.speed = 0.5
+        self.isDead = False
+        self.dy = 0
+        self.jumpHeight = 2
+        self.velocity = 0
         
     def update (self, deltaTime):
         self.currState.execute(self, deltaTime)
-        
 
 
 # State
@@ -98,17 +100,15 @@ class MarioStateIdle (State):
         print "Entering Mario Idle."
 
     def execute (self, entity, deltaTime):
-        for event in pygame.event.get():
-            if event.type == KEYDOWN:
-                if event.key == K_a:
-                    direction = "left"
-                    changeState("move")
-                    
-                elif event.key == K_d:
-                    direction = "right"
-                    changeState("move")
-            else:
-                changeState("idle")
+        key = pygame.key.get_pressed()
+        if key[K_SPACE]:
+            entity.changeState("jump")
+        elif key[K_a]:
+            entity.direction = "left"
+            entity.changeState("move")
+        elif key[K_d]:
+            entity.direction = "right"
+            entity.changeState("move")
 
     def exitState (self, entity):
         print "Exiting Mario Idle."
@@ -120,26 +120,96 @@ class MarioStateIdle (State):
 class MarioStateMove (State):
 
     def enterState (self, entity):
-        print "Entering Mario Idle."
+        print "Entering Mario Move."
 
     def execute (self, entity, deltaTime):
-        for event in pygame.event.get():
-            if event.type == KEYDOWN:
-                if event.key == K_a:
-                    direction = "left"
-                    entity.translate(-1, 0)
-                    
-                elif event.key == K_d:
-                    direction = "right"
-                    entity.translate(1, 0)
-            else:
-                changeState("idle")
+        key = pygame.key.get_pressed()
+        if key[K_LSHIFT]:
+            mario.changeState("run")
+            
+        if key[K_a]:
+            mario.translate(-(mario.speed) * deltaTime, 0)
+            mario.direction = "left"
+            
+        if key[K_d]:
+            mario.translate(mario.speed * deltaTime, 0)
+            mario.direction = "right"
 
+        if not key[K_a] and not key[K_d]:
+            mario.changeState("idle")
+ 
     def exitState (self, entity):
-        print "Exiting Mario Idle."
+        print "Exiting Mario Move."
 
     def toString (self):
         return "move"
+
+# MarioStateRun
+class MarioStateRun (State):
+
+    def enterState (self, entity):
+        print "Entering Mario Run."
+
+    def execute (self, entity, deltaTime):
+        key = pygame.key.get_pressed()
+
+        # Check if player stopped running.
+        if not key[K_LSHIFT]:
+            if not key[K_a] and not key[K_d]:
+                mario.changeState("idle")
+            if key[K_a]:
+                mario.direction = "left"
+                mario.changeState("move")
+            if key[K_d]:
+                mario.direction = "right"
+                mario.changeState("move")
+
+        # Still running.
+        else:
+            if key[K_a]:
+                mario.translate(-(mario.speed) * deltaTime * 2, 0)
+                mario.direction = "left"
+                
+            if key[K_d]:
+                mario.translate(mario.speed * deltaTime * 2, 0)
+                mario.direction = "right"
+ 
+    def exitState (self, entity):
+        print "Exiting Mario Run."
+
+    def toString (self):
+        return "run"
+
+# MarioStateJump
+class MarioStateJump (State):
+    
+    def enterState (self, entity):
+        print "Entering Mario Jump."
+        mario.velocity = 0
+        self.startHeight = mario.y
+
+    def execute (self, entity, deltaTime):
+        key = pygame.key.get_pressed()
+
+        # Update upward velocity.
+        mario.dy += mario.velocity
+        mario.velocity += gravity
+
+        # Start falling back down.
+        if mario.y < self.startHeight - mario.jumpHeight:
+            mario.velocity *= -0.95;
+
+        mario.translate(0, mario.velocity * deltaTime)
+
+        # Landed.
+        if mario.y >= groundY:
+            mario.changeState("idle")
+
+    def exitState (self, entity):
+        print "Exiting Mario Jump."
+
+    def toString (self):
+        return "jump"
 
 
 ####################################
@@ -149,15 +219,17 @@ class MarioStateMove (State):
 pygame.init()
 screenSize = [1280,720]
 screenBGColor = white
-deltaTime = 0
 
 screen = pygame.display.set_mode(screenSize)
 pygame.display.set_caption("SMB")
 
 mario = Mario(screenSize[0]/2, screenSize[1]/2, 50, 50, blue)
+groundY = screenSize[1] - 50
+gravity = 0.1
 
 clock = pygame.time.Clock()
 running = True
+
 
 ####################################
 # Functions
@@ -165,12 +237,11 @@ running = True
 
 def render ():
     screen.fill(screenBGColor)
-    deltaTime = clock.tick(60)
     mario.draw()
-    
     pygame.display.flip()
 
 def tick ():
+    deltaTime = clock.tick(60)
     mario.update(deltaTime)
 
 ####################################
@@ -181,9 +252,15 @@ while running:
     for event in pygame.event.get():
         if event.type == QUIT:
             running = False
-            
+        if event.type == KEYDOWN and event.key == K_ESCAPE:
+            running = False
+
     tick()
     render()
+
+    if mario.isDead:
+        print "Game Over"
+        running = False
 
 pygame.quit()
 
