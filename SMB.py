@@ -36,6 +36,8 @@ class Entity:
         self.color = color
         self.rect = Rect(x,y,w,h)
         self.allStates = {}
+        self.collidingObjects = []
+        self.hasCollision = False
 
     def translate (self, dx, dy):
         if dx < 0:
@@ -56,6 +58,10 @@ class Entity:
             self.prevState = self.currState
             self.currState = self.newState
             self.currState.enterState(self)
+
+    def addCollision (self, collided):
+        self.collidingObjects.append(collided)
+        self.hasCollision = True
 
     def draw (self):
         pygame.draw.rect(screen, self.color, [self.x,self.y,self.w,self.h], 6)
@@ -91,7 +97,9 @@ class QuestionBlock (Entity):
 class GroundBlock (Entity):
     def __init__ (self, x, y, w, h, color):
         Entity.__init__(self, x, y, w, h, color)
-        self.allStates = { "idle":GroundBlockStateIdle() }   
+        self.allStates = { "idle":GroundBlockStateIdle() }
+        self.prevState = self.allStates.get("idle")
+        self.currState = self.prevState
 
     def update (self, deltaTime):
         self.currState.execute(self, deltaTime)
@@ -118,13 +126,13 @@ class Goomba (Entity):
 class Mario (Entity):
     def __init__ (self, x, y, w, h, color):
         Entity.__init__(self, x, y, w, h, color)
-        self.allStates = { "idle":MarioStateIdle(), "move":MarioStateMove(), "run":MarioStateRun(), "jump":MarioStateJump() }
+        self.allStates = { "idle":MarioStateIdle(), "move":MarioStateMove(), "run":MarioStateRun(), "jump":MarioStateJump(), "fall":MarioStateFall() }
         self.prevState = self.allStates.get("idle")
         self.currState = self.prevState
         self.speed = 0.5
         self.isDead = False
         self.dy = 0
-        self.jumpHeight = 2
+        self.jumpHeight = 100
         self.velocity = 0
         
     def update (self, deltaTime):
@@ -148,9 +156,8 @@ class State:
 
 # MarioStateIdle
 class MarioStateIdle (State):
-
     def enterState (self, entity):
-        print "Entering Mario Idle."
+        return
 
     def execute (self, entity, deltaTime):
         key = pygame.key.get_pressed()
@@ -164,17 +171,16 @@ class MarioStateIdle (State):
             entity.changeState("move")
 
     def exitState (self, entity):
-        print "Exiting Mario Idle."
-
+        return
+    
     def toString (self):
         return "idle"
 
 # MarioStateMove
 class MarioStateMove (State):
-
     def enterState (self, entity):
-        print "Entering Mario Move."
-
+        return
+    
     def execute (self, entity, deltaTime):
         key = pygame.key.get_pressed()
         if key[K_LSHIFT]:
@@ -192,16 +198,15 @@ class MarioStateMove (State):
             mario.changeState("idle")
  
     def exitState (self, entity):
-        print "Exiting Mario Move."
-
+        return
+    
     def toString (self):
         return "move"
 
 # MarioStateRun
 class MarioStateRun (State):
-
     def enterState (self, entity):
-        print "Entering Mario Run."
+        return
 
     def execute (self, entity, deltaTime):
         key = pygame.key.get_pressed()
@@ -228,21 +233,21 @@ class MarioStateRun (State):
                 mario.direction = "right"
  
     def exitState (self, entity):
-        print "Exiting Mario Run."
+        return
 
     def toString (self):
         return "run"
 
 # MarioStateJump
 class MarioStateJump (State):
-    
     def enterState (self, entity):
-        print "Entering Mario Jump."
+        mario.dy = 0
         mario.velocity = 0
         self.startHeight = mario.y
 
     def execute (self, entity, deltaTime):
         key = pygame.key.get_pressed()
+        # Get in-air x-axis movement.
 
         # Update upward velocity.
         mario.dy += mario.velocity
@@ -250,31 +255,52 @@ class MarioStateJump (State):
 
         # Start falling back down.
         if mario.y < self.startHeight - mario.jumpHeight:
-            mario.velocity *= -0.95;
+            mario.changeState("fall")
 
-        mario.translate(0, mario.velocity * deltaTime)
-
-        # Landed.
-        if mario.y >= groundY:
-            mario.changeState("idle")
+        mario.translate(0, mario.dy)
 
     def exitState (self, entity):
-        print "Exiting Mario Jump."
-
+        return
+    
     def toString (self):
         return "jump"
 
+# MarioStateFall
+class MarioStateFall (State):
+    def enterState (self, entity):
+        mario.velocity *= -0.95;
+    
+    def execute (self, entity, deltaTime):
+
+        # Check if any collisions.
+        if (entity.hasCollision):
+            for obj in entity.collidingObjects:
+                if isinstance(obj, GroundBlock):
+                    entity.changeState("idle")
+                    # Place entity on top of obj.
+                    entity.translate(0, obj.y - entity.y - entity.h)
+
+            entity.hasCollision = False
+            entity.collidingObjects = []
+            return
+
+
+        mario.dy += mario.velocity
+        mario.velocity -= gravity
+        mario.translate(0, mario.dy)
+
+    def exitState (self, entity):
+        return
+    def toString (self):
+        return "fall"
 
 # GroundBlockStateIdle
 class GroundBlockStateIdle (State):
     def enterState (self, entity):
         return
 
-    #def execute (self, entity, deltaTime):
-    #    if entity.rect.collideRect(mario.rect):
-            # Take mario's prev and curr positions and
-            # decide which side of the ground block to push
-            # mario away from.
+    def execute (self, entity, deltaTime):
+        return
 
     def exitState(self, entity):
         return
@@ -330,6 +356,19 @@ class Level:
         elif (tile == marioTile):
             self.map.append(Mario(xPos, yPos, tileWidth, tileWidth, marioColor))
 
+    def update (self, deltaTime):
+        for tile in self.map:
+            tile.update(deltaTime)
+        
+        self.checkCollisions()
+
+    def checkCollisions (self):
+        for t1 in self.map:
+            for t2 in self.map:
+                if t1 != t2 and t1.rect.colliderect(t2.rect):
+                    t1.addCollision(t2)
+                    t2.addCollision(t1)
+
     def getMario (self):
         for tile in self.map:
             if tile.color == marioColor:
@@ -347,8 +386,11 @@ class LevelOneOne (Level):
         Level.__init__(self, fileHandle)
 
     def update (self, deltaTime):
+        Level.update(self, deltaTime)
+        
         # Handle stuff like trigger zones and where/when
         # enemies should spawn.
+
         return
 
 
@@ -372,9 +414,8 @@ marioColor = blue
 levelHandle = "1-1.txt"
 level = LevelOneOne(levelHandle)
 
-# Mario
-groundY = screenSize[1] - 50
-gravity = 0.1
+# Physics
+gravity = -0.2
 
 # Game
 screen = pygame.display.set_mode(screenSize)
@@ -389,17 +430,13 @@ running = True
 
 def render ():
     screen.fill(screenBGColor)
-        
     level.draw()
-
     pygame.display.flip()
 
 def tick ():
     deltaTime = clock.tick(60)
-
-    mario = level.getMario()
-    if not mario is None:
-        mario.update(deltaTime)
+    level.update(deltaTime)
+    
 
 ####################################
 # Main loop
