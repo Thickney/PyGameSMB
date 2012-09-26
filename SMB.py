@@ -328,12 +328,17 @@ class Level:
             self.map.append(GroundBlock(xPos, yPos, tileWidth, tileWidth, black))
 
         elif (tile == marioTile):
-            mario = Mario(xPos, yPos, tileWidth, tileWidth, blue)
-            marioLoaded = True
+            self.map.append(Mario(xPos, yPos, tileWidth, tileWidth, marioColor))
 
-    def draw (self, deltaTime):
-        for key in self.map:
-            pygame.draw.rect(screen, self.color, [key[0], key[1], tileWidth, tileWidth], 6)
+    def getMario (self):
+        for tile in self.map:
+            if tile.color == marioColor:
+                return tile
+        return None
+
+    def draw (self):
+        for tile in self.map:
+            pygame.draw.rect(screen, tile.color, [tile.x, tile.y, tile.w, tile.h], 6)
 
 
 # 1-1
@@ -346,6 +351,7 @@ class LevelOneOne (Level):
         # enemies should spawn.
         return
 
+
 ####################################
 # Globals
 ####################################
@@ -356,21 +362,19 @@ screenSize = [1280,720]
 screenBGColor = white
 
 # Tiles
-tileWidth = 25
+tileWidth = 40
 blankTile = ' '
 groundTile = 'g'
 marioTile = 'm'
+marioColor = blue
 
 # Levels
 levelHandle = "1-1.txt"
 level = LevelOneOne(levelHandle)
 
 # Mario
-mario = None
-#mario = Mario(screenSize[0]/2, screenSize[1]/2, 50, 50, blue)
 groundY = screenSize[1] - 50
 gravity = 0.1
-marioLoaded = False
 
 # Game
 screen = pygame.display.set_mode(screenSize)
@@ -385,16 +389,16 @@ running = True
 
 def render ():
     screen.fill(screenBGColor)
-
-    if marioLoaded:
-        mario.draw()
         
+    level.draw()
+
     pygame.display.flip()
 
 def tick ():
     deltaTime = clock.tick(60)
 
-    if marioLoaded:
+    mario = level.getMario()
+    if not mario is None:
         mario.update(deltaTime)
 
 ####################################
@@ -411,7 +415,8 @@ while running:
     tick()
     render()
 
-    if marioLoaded and mario.isDead:
+    mario = level.getMario()
+    if not mario is None and mario.isDead:
         print "Game Over"
         running = False
 
