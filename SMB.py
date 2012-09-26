@@ -126,7 +126,7 @@ class Goomba (Entity):
 class Mario (Entity):
     def __init__ (self, x, y, w, h, color):
         Entity.__init__(self, x, y, w, h, color)
-        self.allStates = { "idle":MarioStateIdle(), "move":MarioStateMove(), "run":MarioStateRun(), "jump":MarioStateJump(), "fall":MarioStateFall() }
+        self.allStates = { "idle":MarioStateIdle(), "move":MarioStateMove(), "jump":MarioStateJump(), "fall":MarioStateFall() }
         self.prevState = self.allStates.get("idle")
         self.currState = self.prevState
         self.speed = 0.5
@@ -179,20 +179,33 @@ class MarioStateIdle (State):
 # MarioStateMove
 class MarioStateMove (State):
     def enterState (self, entity):
-        return
+        self.run = False
     
     def execute (self, entity, deltaTime):
         key = pygame.key.get_pressed()
+
+        #if key[K_SPACE]:
+         #   entity.changeState("jump")
+        
         if key[K_LSHIFT]:
-            mario.changeState("run")
+            self.run = True
             
         if key[K_a]:
-            mario.translate(-(mario.speed) * deltaTime, 0)
+            if self.run:
+                mario.translate(-(mario.speed) * 2 * deltaTime, 0)
+            else:
+                mario.translate(-(mario.speed) * deltaTime, 0)
             mario.direction = "left"
             
         if key[K_d]:
-            mario.translate(mario.speed * deltaTime, 0)
+            if self.run:
+                mario.translate(mario.speed * 2 * deltaTime, 0)
+            else:
+                mario.translate(mario.speed * deltaTime, 0)
             mario.direction = "right"
+
+        if not key[K_LSHIFT]:
+            self.run = False
 
         if not key[K_a] and not key[K_d]:
             mario.changeState("idle")
@@ -203,52 +216,25 @@ class MarioStateMove (State):
     def toString (self):
         return "move"
 
-# MarioStateRun
-class MarioStateRun (State):
-    def enterState (self, entity):
-        return
-
-    def execute (self, entity, deltaTime):
-        key = pygame.key.get_pressed()
-
-        # Check if player stopped running.
-        if not key[K_LSHIFT]:
-            if not key[K_a] and not key[K_d]:
-                mario.changeState("idle")
-            if key[K_a]:
-                mario.direction = "left"
-                mario.changeState("move")
-            if key[K_d]:
-                mario.direction = "right"
-                mario.changeState("move")
-
-        # Still running.
-        else:
-            if key[K_a]:
-                mario.translate(-(mario.speed) * deltaTime * 2, 0)
-                mario.direction = "left"
-                
-            if key[K_d]:
-                mario.translate(mario.speed * deltaTime * 2, 0)
-                mario.direction = "right"
- 
-    def exitState (self, entity):
-        return
-
-    def toString (self):
-        return "run"
-
 # MarioStateJump
 class MarioStateJump (State):
     def enterState (self, entity):
         mario.dy = 0
         mario.velocity = 0
         self.startHeight = mario.y
+        self.dx = 0
 
     def execute (self, entity, deltaTime):
+        # Check in-air movement.
         key = pygame.key.get_pressed()
-        # Get in-air x-axis movement.
 
+        if key[K_a]:
+            mario.direction = "left"
+            self.dx = -(mario.speed) * deltaTime
+        if key[K_d]:
+            mario.direction = "right"
+            self.dx = mario.speed * deltaTime
+        
         # Update upward velocity.
         mario.dy += mario.velocity
         mario.velocity += gravity
@@ -257,7 +243,7 @@ class MarioStateJump (State):
         if mario.y < self.startHeight - mario.jumpHeight:
             mario.changeState("fall")
 
-        mario.translate(0, mario.dy)
+        mario.translate(self.dx, mario.dy)
 
     def exitState (self, entity):
         return
@@ -269,8 +255,18 @@ class MarioStateJump (State):
 class MarioStateFall (State):
     def enterState (self, entity):
         mario.velocity *= -0.95;
+        self.dx = 0
     
     def execute (self, entity, deltaTime):
+        # Check in-air movement.
+        key = pygame.key.get_pressed()
+
+        if key[K_a]:
+            mario.direction = "left"
+            self.dx = -(mario.speed) * deltaTime
+        if key[K_d]:
+            mario.direction = "right"
+            self.dx = mario.speed * deltaTime
 
         # Check if any collisions.
         if (entity.hasCollision):
@@ -284,10 +280,9 @@ class MarioStateFall (State):
             entity.collidingObjects = []
             return
 
-
         mario.dy += mario.velocity
         mario.velocity -= gravity
-        mario.translate(0, mario.dy)
+        mario.translate(self.dx, mario.dy)
 
     def exitState (self, entity):
         return
@@ -363,11 +358,11 @@ class Level:
         self.checkCollisions()
 
     def checkCollisions (self):
-        for t1 in self.map:
-            for t2 in self.map:
-                if t1 != t2 and t1.rect.colliderect(t2.rect):
-                    t1.addCollision(t2)
-                    t2.addCollision(t1)
+        mario = self.getMario()
+        for tile in self.map:
+            if tile != mario and tile.rect.colliderect(mario.rect):
+                    tile.addCollision(mario)
+                    mario.addCollision(tile)
 
     def getMario (self):
         for tile in self.map:
@@ -408,6 +403,9 @@ tileWidth = 40
 blankTile = ' '
 groundTile = 'g'
 marioTile = 'm'
+pipeTile = 'p'
+blockTile = 'b'
+questionTile = 'q'
 marioColor = blue
 
 # Levels
@@ -415,7 +413,7 @@ levelHandle = "1-1.txt"
 level = LevelOneOne(levelHandle)
 
 # Physics
-gravity = -0.2
+gravity = -0.1
 
 # Game
 screen = pygame.display.set_mode(screenSize)
