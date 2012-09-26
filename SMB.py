@@ -59,7 +59,60 @@ class Entity:
 
     def draw (self):
         pygame.draw.rect(screen, self.color, [self.x,self.y,self.w,self.h], 6)
-        
+
+# Coin
+class Coin (Entity):
+    def __init__ (self, x, y, w, h, color):
+        Entity.__init__(self, x, y, w, h, color)
+        self.allStates = { "idle":CoinStateIdle() }
+
+    def update (self, deltaTime):
+        self.currState.execute(self, deltaTime)    
+
+# BrickBlock
+class BrickBlock (Entity):
+    def __init__ (self, x, y, w, h, color):
+        Entity.__init__(self, x, y, w, h, color)
+        self.allStates = { "idle":BrickBlockStateIdle(), "hit_light":BrickBlockStateHitLight(), "hit_hard":BrickBlockStateHitHard() }   
+
+    def update (self, deltaTime):
+        self.currState.execute(self, deltaTime)
+
+# QuestionBlock
+class QuestionBlock (Entity):
+    def __init__ (self, x, y, w, h, color):
+        Entity.__init__(self, x, y, w, h, color)
+        self.allStates = { "idle":QuestionBlockStateIdle(), "hit":QuestionBlockStateHit() }   
+
+    def update (self, deltaTime):
+        self.currState.execute(self, deltaTime)
+
+# GroundBlock 
+class GroundBlock (Entity):
+    def __init__ (self, x, y, w, h, color):
+        Entity.__init__(self, x, y, w, h, color)
+        self.allStates = { "idle":GroundBlockStateIdle() }   
+
+    def update (self, deltaTime):
+        self.currState.execute(self, deltaTime)
+
+# Mushroom
+class Mushroom (Entity):
+    def __init__ (self, x, y, w, h, color):
+        Entity.__init__(self, x, y, w, h, color)
+        self.allStates = { "spawn":MushroomStateSpawn(), "move":MushroomStateMove() }
+
+    def update (self, deltaTime):
+        self.currState.execute(self, deltaTime)
+
+# Goomba
+class Goomba (Entity):
+    def __init__ (self, x, y, w, h, color):
+        Entity.__init__(self, x, y, w, h, color)
+        self.allStates = { "move":GoombaStateMove(), "fall":GoombaStateFall(), "hit":GoombaStateHit(), "squished":GoombaStateSquished() }
+
+    def update (self, deltaTime):
+        self.currState.execute(self, deltaTime)
 
 # Mario
 class Mario (Entity):
@@ -212,21 +265,116 @@ class MarioStateJump (State):
         return "jump"
 
 
+# GroundBlockStateIdle
+class GroundBlockStateIdle (State):
+    def enterState (self, entity):
+        return
+
+    #def execute (self, entity, deltaTime):
+    #    if entity.rect.collideRect(mario.rect):
+            # Take mario's prev and curr positions and
+            # decide which side of the ground block to push
+            # mario away from.
+
+    def exitState(self, entity):
+        return
+
+    def toString (self):
+        return "idle"
+
+# CoinStateIdle
+class CoinStateIdle (State):
+    def enterState (self, entity):
+       return
+
+    def execute (self, entity, deltaTime):
+        return
+
+    def exitState(self, entity):
+        return
+
+    def toString (self):
+        return "idle"
+
+####################################
+# Levels
+####################################
+
+# Level
+class Level:
+    def __init__ (self, fileHandle):
+        self.f = open(fileHandle)
+        self.tileRows = self.f.readlines()
+
+        # Set up dummy tile
+        self.map = []
+
+        i = 0
+        for row in self.tileRows:
+            j = 0
+            for tile in row:
+                self.loadItem(tile, j, i)
+                j += 1
+            i += 1
+
+    def loadItem (self, tile, x, y):
+        xPos = x * tileWidth
+        yPos = y * tileWidth
+
+        if (tile == blankTile):
+            return
+        
+        elif (tile == groundTile):
+            self.map.append(GroundBlock(xPos, yPos, tileWidth, tileWidth, black))
+
+        elif (tile == marioTile):
+            mario = Mario(xPos, yPos, tileWidth, tileWidth, blue)
+            marioLoaded = True
+
+    def draw (self, deltaTime):
+        for key in self.map:
+            pygame.draw.rect(screen, self.color, [key[0], key[1], tileWidth, tileWidth], 6)
+
+
+# 1-1
+class LevelOneOne (Level):
+    def __init__ (self, fileHandle):
+        Level.__init__(self, fileHandle)
+
+    def update (self, deltaTime):
+        # Handle stuff like trigger zones and where/when
+        # enemies should spawn.
+        return
+
 ####################################
 # Globals
 ####################################
 
+# Display
 pygame.init()
 screenSize = [1280,720]
 screenBGColor = white
 
-screen = pygame.display.set_mode(screenSize)
-pygame.display.set_caption("SMB")
+# Tiles
+tileWidth = 25
+blankTile = ' '
+groundTile = 'g'
+marioTile = 'm'
 
-mario = Mario(screenSize[0]/2, screenSize[1]/2, 50, 50, blue)
+# Levels
+levelHandle = "1-1.txt"
+level = LevelOneOne(levelHandle)
+
+# Mario
+mario = None
+#mario = Mario(screenSize[0]/2, screenSize[1]/2, 50, 50, blue)
 groundY = screenSize[1] - 50
 gravity = 0.1
+marioLoaded = False
 
+# Game
+screen = pygame.display.set_mode(screenSize)
+pygame.display.set_caption("SMB")
 clock = pygame.time.Clock()
 running = True
 
@@ -237,12 +385,17 @@ running = True
 
 def render ():
     screen.fill(screenBGColor)
-    mario.draw()
+
+    if marioLoaded:
+        mario.draw()
+        
     pygame.display.flip()
 
 def tick ():
     deltaTime = clock.tick(60)
-    mario.update(deltaTime)
+
+    if marioLoaded:
+        mario.update(deltaTime)
 
 ####################################
 # Main loop
@@ -258,7 +411,7 @@ while running:
     tick()
     render()
 
-    if mario.isDead:
+    if marioLoaded and mario.isDead:
         print "Game Over"
         running = False
 
