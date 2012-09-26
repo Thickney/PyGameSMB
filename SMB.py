@@ -79,8 +79,10 @@ class Coin (Entity):
 class BrickBlock (Entity):
     def __init__ (self, x, y, w, h, color):
         Entity.__init__(self, x, y, w, h, color)
-        self.allStates = { "idle":BrickBlockStateIdle(), "hit_light":BrickBlockStateHitLight(), "hit_hard":BrickBlockStateHitHard() }   
-
+        self.allStates = { "idle":BrickBlockStateIdle() } #, "hit_light":BrickBlockStateHitLight(), "hit_hard":BrickBlockStateHitHard() }   
+        self.prevState = self.allStates.get("idle")
+        self.currState = self.prevState
+        
     def update (self, deltaTime):
         self.currState.execute(self, deltaTime)
 
@@ -88,7 +90,9 @@ class BrickBlock (Entity):
 class QuestionBlock (Entity):
     def __init__ (self, x, y, w, h, color):
         Entity.__init__(self, x, y, w, h, color)
-        self.allStates = { "idle":QuestionBlockStateIdle(), "hit":QuestionBlockStateHit() }   
+        self.allStates = { "idle":QuestionBlockStateIdle() } #, "hit":QuestionBlockStateHit() }
+        self.prevState = self.allStates.get("idle")
+        self.currState = self.prevState
 
     def update (self, deltaTime):
         self.currState.execute(self, deltaTime)
@@ -132,7 +136,7 @@ class Mario (Entity):
         self.speed = 0.5
         self.isDead = False
         self.dy = 0
-        self.jumpHeight = 100
+        self.jumpHeight = 150
         self.velocity = 0
         
     def update (self, deltaTime):
@@ -184,8 +188,19 @@ class MarioStateMove (State):
     def execute (self, entity, deltaTime):
         key = pygame.key.get_pressed()
 
-        #if key[K_SPACE]:
-         #   entity.changeState("jump")
+        # Check for move off of any platform
+        downRect = entity.rect
+        downRect.y += 10
+        shouldFall = True
+        for item in level.map:
+            if item != mario and downRect.colliderect(item):
+                shouldFall = False
+
+        if shouldFall:
+            entity.changeState("fall")
+
+        if key[K_SPACE]:
+            entity.changeState("jump")
         
         if key[K_LSHIFT]:
             self.run = True
@@ -289,6 +304,34 @@ class MarioStateFall (State):
     def toString (self):
         return "fall"
 
+# QuestionBlockStateIdle
+class QuestionBlockStateIdle (State):
+    def enterState (self, entity):
+        return
+
+    def execute (self, entity, deltaTime):
+        return
+
+    def exitState(self, entity):
+        return
+
+    def toString (self):
+        return "idle"
+
+# BrickBlockStateIdle
+class BrickBlockStateIdle (State):
+    def enterState (self, entity):
+        return
+
+    def execute (self, entity, deltaTime):
+        return
+
+    def exitState(self, entity):
+        return
+
+    def toString (self):
+        return "idle"
+
 # GroundBlockStateIdle
 class GroundBlockStateIdle (State):
     def enterState (self, entity):
@@ -296,7 +339,7 @@ class GroundBlockStateIdle (State):
 
     def execute (self, entity, deltaTime):
         return
-
+        
     def exitState(self, entity):
         return
 
@@ -350,6 +393,12 @@ class Level:
 
         elif (tile == marioTile):
             self.map.append(Mario(xPos, yPos, tileWidth, tileWidth, marioColor))
+
+        elif (tile == blockTile):
+            self.map.append(BrickBlock(xPos, yPos, tileWidth, tileWidth, red))
+
+        elif (tile == questionTile):
+            self.map.append(QuestionBlock(xPos, yPos, tileWidth, tileWidth, green))
 
     def update (self, deltaTime):
         for tile in self.map:
