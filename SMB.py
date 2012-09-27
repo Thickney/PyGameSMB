@@ -43,8 +43,13 @@ class Camera:
         else:
             self.x = level.getMario().x - screenSize[0]/2 + tileWidth/2
 
+# Struct
+class Struct (object):
+    def __init__ (self, **entries):
+        self.__dict__.update(entries)
+
 # Entity
-class Entity:
+class Entity (object):
     x = 0
     y = 0
     w = 0
@@ -66,6 +71,15 @@ class Entity:
         self.collidingObjects = []
         self.hasCollision = False
 
+    def left (self):
+        return self.x
+    def right (self):
+        return self.x + self.w
+    def bottom (self):
+        return self.y + self.h
+    def top (self):
+        return self.y
+
     def translate (self, dx, dy):
         if dx < 0:
             self.direction = "left"
@@ -73,6 +87,10 @@ class Entity:
             self.direction = "right"
 
         self.x += dx
+
+        if isinstance(self, Mario) and self.x < 0:
+            self.x = 0
+        
         self.y += dy
         self.rect = Rect(self.x,self.y,self.w,self.h)
 
@@ -153,6 +171,17 @@ class Goomba (Entity):
     def update (self, deltaTime):
         self.currState.execute(self, deltaTime)
 
+# Pipe
+class Pipe (Entity):
+    def __init__ (self, x, y, w, h, color):
+        Entity.__init__(self, x, y, w, h, color)
+        self.allStates = { "idle":PipeStateIdle() }
+        self.prevState = self.allStates.get("idle")
+        self.currState = self.prevState
+
+    def update (self, deltaTime):
+        self.currState.execute(self, deltaTime)
+
 # Mario
 class Mario (Entity):
     def __init__ (self, x, y, w, h, color):
@@ -171,7 +200,7 @@ class Mario (Entity):
 
 
 # State
-class State:
+class State (object):
 
     def enterState (self, entity):
         raise NotImplementedError("Please Implement enter() in State subclass.")
@@ -181,9 +210,6 @@ class State:
 
     def exitState (self, entity):
         raise NotImplementedError("Please Implement exit() in State subclass.")
-
-    def toString (self):
-        raise NotImplementedError("Please Implement toString() in State subclass.")
 
 # MarioStateIdle
 class MarioStateIdle (State):
@@ -203,9 +229,6 @@ class MarioStateIdle (State):
 
     def exitState (self, entity):
         return
-    
-    def toString (self):
-        return "idle"
 
 # MarioStateMove
 class MarioStateMove (State):
@@ -214,6 +237,15 @@ class MarioStateMove (State):
     
     def execute (self, entity, deltaTime):
         key = pygame.key.get_pressed()
+
+        # Check for move into a wall
+        if entity.hasCollision:
+            for tile in entity.collidingObjects:
+                sides = collision_sides(entity, tile)
+                if sides.left:
+                    entity.x = tile.x + tile.w
+                elif sides.right:
+                    entity.x = tile.x - entity.w
 
         # Check for move off of any platform
         downRect = entity.rect
@@ -254,9 +286,6 @@ class MarioStateMove (State):
  
     def exitState (self, entity):
         return
-    
-    def toString (self):
-        return "move"
 
 # MarioStateJump
 class MarioStateJump (State):
@@ -282,7 +311,7 @@ class MarioStateJump (State):
             entity.direction = "right"
             self.dx = speed
 
-        rect = Rect(entity.x, entity.y - 10, entity.w, entity.h)
+        rect = Rect(entity.x, entity.y - entity.w/3, entity.w, entity.h)
         for tile in level.map:
             if not isinstance(tile, Mario) and rect.colliderect(tile.rect):
                 entity.translate(0, entity.y - tile.y + entity.h)
@@ -302,8 +331,6 @@ class MarioStateJump (State):
     def exitState (self, entity):
         return
     
-    def toString (self):
-        return "jump"
 
 # MarioStateFall
 class MarioStateFall (State):
@@ -341,8 +368,6 @@ class MarioStateFall (State):
 
     def exitState (self, entity):
         return
-    def toString (self):
-        return "fall"
 
 # QuestionBlockStateIdle
 class QuestionBlockStateIdle (State):
@@ -355,9 +380,6 @@ class QuestionBlockStateIdle (State):
     def exitState(self, entity):
         return
 
-    def toString (self):
-        return "idle"
-
 # BrickBlockStateIdle
 class BrickBlockStateIdle (State):
     def enterState (self, entity):
@@ -368,9 +390,6 @@ class BrickBlockStateIdle (State):
 
     def exitState(self, entity):
         return
-
-    def toString (self):
-        return "idle"
 
 # GroundBlockStateIdle
 class GroundBlockStateIdle (State):
@@ -383,8 +402,16 @@ class GroundBlockStateIdle (State):
     def exitState(self, entity):
         return
 
-    def toString (self):
-        return "idle"
+# PipeStateIdle
+class PipeStateIdle (State):
+    def enterState (self, entity):
+        return
+
+    def execute (self, entity, deltaTime):
+        return
+        
+    def exitState(self, entity):
+        return
 
 # CoinStateIdle
 class CoinStateIdle (State):
@@ -397,22 +424,17 @@ class CoinStateIdle (State):
     def exitState(self, entity):
         return
 
-    def toString (self):
-        return "idle"
-
 ####################################
 # Levels
 ####################################
 
 # Level
 class Level:
+    
     def __init__ (self, fileHandle):
         self.f = open(fileHandle)
         self.tileRows = self.f.readlines()
-
-        # Set up dummy tile
         self.map = []
-
         i = 0
         for row in self.tileRows:
             j = 0
@@ -439,6 +461,9 @@ class Level:
 
         elif (tile == questionTile):
             self.map.append(QuestionBlock(xPos, yPos, tileWidth, tileWidth, gold))
+
+        elif (tile == pipeTile):
+            self.map.append(Pipe(xPos, yPos, tileWidth, tileWidth, green))
 
     def update (self, deltaTime):
         for tile in self.map:
@@ -516,6 +541,25 @@ running = True
 ####################################
 # Functions
 ####################################
+
+def collision_sides (a, b):
+    sides = Struct(left=False, right=False, top=False, bottom=False)
+    
+    left = Rect(a.left(), a.top() + 1, 1, a.h - 2)
+    right = Rect(a.right(), a.top() + 1, 1, a.h - 2)
+    top = Rect(a.left() + 1, a.top(), a.w - 2, 1)
+    bottom = Rect(a.left() + 1, a.bottom(), a.w - 2, 1)
+
+    if left.colliderect(b):
+        sides.left = True
+    if right.colliderect(b):
+        sides.right = True
+    if top.colliderect(b):
+        sides.top = True
+    if bottom.colliderect(b):
+        sides.bottom = True
+
+    return sides
 
 def render ():
     screen.fill(screenBGColor)

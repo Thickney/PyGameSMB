@@ -3,13 +3,13 @@
 
 
 
-              q
-					      
-
-
-            bqbqb
-			
-						    ppp
-   m   						    ppp
-ggggggggggggggggggggggggggg  gggggggggggggggggggggggggg
-ggggggggggggggggggggggggggg  gggggggggggggggggggggggggg
+              q                                                                                                                                                                                 gg
+                                                                                                                                                                                               ggg
+                                                                                                                                                                                              gggg
+                                                                                                                                                                                             ggggg
+            bqbqb                         ppp         ppp                  bqb                b        bq    q  q  q    b        bb      g  g          gg  g              bbqb              gggggg
+                                ppp       ppp         ppp                                                                               gg  gg        ggg  gg                              ggggggg
+                     ppp        ppp       ppp         ppp                                                                              ggg  ggg      gggg  ggg     ppp                ppp gggggggg
+   m                 ppp        ppp       ppp         ppp                                                                             gggg  gggg    ggggg  gggg    ppp                pppggggggggg       g
+gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg  gggggggggggggggg   gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg  ggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
+gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg  gggggggggggggggg   gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg  ggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg
