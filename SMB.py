@@ -9,8 +9,14 @@ from pygame.locals import *
 red = [255,0,0]
 green = [0,255,0]
 blue = [0,0,255]
+lightBlue = [135,206,250]
 white = [255,255,255]
 black = [0,0,0]
+gold = [255,215,0]
+groundBrown = [160,82,45]
+brickBrown = [205,133,63]
+
+marioColor = white
 
 ####################################
 # Classes
@@ -29,8 +35,10 @@ class Camera:
         self.getValues()
 
     def getValues (self):
-        
-        if level.getMario().x < screenSize[0]/2:
+        mario = level.getMario()
+        if mario is None:
+            return
+        if mario.x < screenSize[0]/2:
             self.x = 0
         else:
             self.x = level.getMario().x - screenSize[0]/2 + tileWidth/2
@@ -83,7 +91,7 @@ class Entity:
         self.hasCollision = True
 
     def draw (self):
-        pygame.draw.rect(screen, self.color, [self.x,self.y,self.w,self.h], 6)
+        pygame.draw.rect(screen, self.color, [self.x - camera.x, self.y - camera.y, self.w, self.h], 0)
 
 # Coin
 class Coin (Entity):
@@ -212,7 +220,7 @@ class MarioStateMove (State):
         downRect.y += 10
         shouldFall = True
         for item in level.map:
-            if item != mario and downRect.colliderect(item):
+            if item != entity and downRect.colliderect(item):
                 shouldFall = False
 
         if shouldFall:
@@ -226,23 +234,23 @@ class MarioStateMove (State):
             
         if key[K_a]:
             if self.run:
-                mario.translate(-(mario.speed) * 2 * deltaTime, 0)
+                entity.translate(-(entity.speed) * 2 * deltaTime, 0)
             else:
-                mario.translate(-(mario.speed) * deltaTime, 0)
-            mario.direction = "left"
+                entity.translate(-(entity.speed) * deltaTime, 0)
+            entity.direction = "left"
             
         if key[K_d]:
             if self.run:
-                mario.translate(mario.speed * 2 * deltaTime, 0)
+                entity.translate(entity.speed * 2 * deltaTime, 0)
             else:
-                mario.translate(mario.speed * deltaTime, 0)
-            mario.direction = "right"
+                entity.translate(entity.speed * deltaTime, 0)
+            entity.direction = "right"
 
         if not key[K_LSHIFT]:
             self.run = False
 
         if not key[K_a] and not key[K_d]:
-            mario.changeState("idle")
+            entity.changeState("idle")
  
     def exitState (self, entity):
         return
@@ -421,16 +429,16 @@ class Level:
             return
         
         elif (tile == groundTile):
-            self.map.append(GroundBlock(xPos, yPos, tileWidth, tileWidth, black))
+            self.map.append(GroundBlock(xPos, yPos, tileWidth, tileWidth, groundBrown))
 
         elif (tile == marioTile):
-            self.map.append(Mario(xPos, yPos, tileWidth, tileWidth, marioColor))
+            self.map.append(Mario(xPos, yPos, tileWidth, tileWidth, white))
 
         elif (tile == blockTile):
-            self.map.append(BrickBlock(xPos, yPos, tileWidth, tileWidth, red))
+            self.map.append(BrickBlock(xPos, yPos, tileWidth, tileWidth, brickBrown))
 
         elif (tile == questionTile):
-            self.map.append(QuestionBlock(xPos, yPos, tileWidth, tileWidth, green))
+            self.map.append(QuestionBlock(xPos, yPos, tileWidth, tileWidth, gold))
 
     def update (self, deltaTime):
         for tile in self.map:
@@ -440,6 +448,8 @@ class Level:
 
     def checkCollisions (self):
         mario = self.getMario()
+        if mario is None:
+            return
         for tile in self.map:
             if tile != mario and tile.rect.colliderect(mario.rect):
                     tile.addCollision(mario)
@@ -453,8 +463,7 @@ class Level:
 
     def draw (self):
         for tile in self.map:
-            pygame.draw.rect(screen, tile.color, [tile.x - camera.x, tile.y - camera.y, tile.w, tile.h], 6)
-
+            tile.draw()
 
 # 1-1
 class LevelOneOne (Level):
@@ -477,7 +486,7 @@ class LevelOneOne (Level):
 # Display
 pygame.init()
 screenSize = [1280,720]
-screenBGColor = white
+screenBGColor = lightBlue
 
 # Tiles
 tileWidth = 50
@@ -487,7 +496,6 @@ marioTile = 'm'
 pipeTile = 'p'
 blockTile = 'b'
 questionTile = 'q'
-marioColor = blue
 
 # Levels
 levelHandle = "1-1.txt"
@@ -535,7 +543,8 @@ while running:
     render()
 
     mario = level.getMario()
-    if not mario is None and mario.isDead:
+    #if not mario is None and mario.isDead:
+    if not mario is None and mario.y > screenSize[1]:
         print "Game Over"
         running = False
 
