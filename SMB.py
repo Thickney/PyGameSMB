@@ -16,6 +16,24 @@ black = [0,0,0]
 # Classes
 ####################################
 
+# Camera
+class Camera:
+    def __init__ (self):
+        self.getValues()
+
+    def update (self):
+        self.getValues()
+
+    def getValues (self):
+        if level.getMario().x < screenSize[0]/2:
+            self.x = 0
+        else:
+            self.x = screenSize[0]/2 - tileWidth/2
+
+        self.y = 0
+        self.width = screenSize[0]
+        self.height = screenSize[1]
+
 # Entity
 class Entity:
     x = 0
@@ -234,9 +252,9 @@ class MarioStateMove (State):
 # MarioStateJump
 class MarioStateJump (State):
     def enterState (self, entity):
-        mario.dy = 0
-        mario.velocity = 0
-        self.startHeight = mario.y
+        entity.dy = 0
+        entity.velocity = -0.2
+        self.startHeight = entity.y
         self.dx = 0
 
     def execute (self, entity, deltaTime):
@@ -244,21 +262,21 @@ class MarioStateJump (State):
         key = pygame.key.get_pressed()
 
         if key[K_a]:
-            mario.direction = "left"
-            self.dx = -(mario.speed) * deltaTime
+            entity.direction = "left"
+            self.dx = -(entity.speed)
         if key[K_d]:
-            mario.direction = "right"
-            self.dx = mario.speed * deltaTime
+            entity.direction = "right"
+            self.dx = entity.speed
         
         # Update upward velocity.
-        mario.dy += mario.velocity
-        mario.velocity += gravity
+        entity.dy += entity.velocity
+        entity.velocity += gravity
 
         # Start falling back down.
-        if mario.y < self.startHeight - mario.jumpHeight:
-            mario.changeState("fall")
-
-        mario.translate(self.dx, mario.dy)
+        if entity.velocity >= 0:
+            entity.changeState("fall")
+        else:
+            entity.translate(self.dx * deltaTime, entity.dy * deltaTime)
 
     def exitState (self, entity):
         return
@@ -269,7 +287,6 @@ class MarioStateJump (State):
 # MarioStateFall
 class MarioStateFall (State):
     def enterState (self, entity):
-        mario.velocity *= -0.95;
         self.dx = 0
     
     def execute (self, entity, deltaTime):
@@ -277,16 +294,16 @@ class MarioStateFall (State):
         key = pygame.key.get_pressed()
 
         if key[K_a]:
-            mario.direction = "left"
-            self.dx = -(mario.speed) * deltaTime
+            entity.direction = "left"
+            self.dx = -(entity.speed)
         if key[K_d]:
-            mario.direction = "right"
-            self.dx = mario.speed * deltaTime
+            entity.direction = "right"
+            self.dx = entity.speed
 
         # Check if any collisions.
         if (entity.hasCollision):
             for obj in entity.collidingObjects:
-                if isinstance(obj, GroundBlock):
+                if isinstance(obj, GroundBlock) or isinstance(obj, BrickBlock):
                     entity.changeState("idle")
                     # Place entity on top of obj.
                     entity.translate(0, obj.y - entity.y - entity.h)
@@ -295,9 +312,13 @@ class MarioStateFall (State):
             entity.collidingObjects = []
             return
 
-        mario.dy += mario.velocity
-        mario.velocity -= gravity
-        mario.translate(self.dx, mario.dy)
+        if entity.dy > maxVelocity:
+            entity.dy = maxVelocity
+        else:
+            entity.dy += entity.velocity
+            
+        entity.velocity += gravity
+        entity.translate(self.dx * deltaTime, entity.dy * deltaTime)
 
     def exitState (self, entity):
         return
@@ -462,11 +483,13 @@ levelHandle = "1-1.txt"
 level = LevelOneOne(levelHandle)
 
 # Physics
-gravity = -0.1
+gravity = 0.02
+maxVelocity = 1
 
 # Game
 screen = pygame.display.set_mode(screenSize)
 pygame.display.set_caption("SMB")
+camera = Camera()
 clock = pygame.time.Clock()
 running = True
 
@@ -483,6 +506,7 @@ def render ():
 def tick ():
     deltaTime = clock.tick(60)
     level.update(deltaTime)
+    camera.update()
     
 
 ####################################
