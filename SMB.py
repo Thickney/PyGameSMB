@@ -20,19 +20,20 @@ black = [0,0,0]
 class Camera:
     def __init__ (self):
         self.getValues()
+        self.x = 0
+        self.y = 0
+        self.w = screenSize[0]
+        self.h = screenSize[1]
 
     def update (self):
         self.getValues()
 
     def getValues (self):
+        
         if level.getMario().x < screenSize[0]/2:
             self.x = 0
         else:
-            self.x = screenSize[0]/2 - tileWidth/2
-
-        self.y = 0
-        self.width = screenSize[0]
-        self.height = screenSize[1]
+            self.x = level.getMario().x - screenSize[0]/2 + tileWidth/2
 
 # Entity
 class Entity:
@@ -260,17 +261,29 @@ class MarioStateJump (State):
     def execute (self, entity, deltaTime):
         # Check in-air movement.
         key = pygame.key.get_pressed()
+        speed = entity.speed
+        jumpGravity = gravity
 
+        if key[K_LSHIFT]:
+            speed *= 2
+            jumpGravity *= 0.9
         if key[K_a]:
             entity.direction = "left"
-            self.dx = -(entity.speed)
+            self.dx = -speed
         if key[K_d]:
             entity.direction = "right"
-            self.dx = entity.speed
+            self.dx = speed
+
+        rect = Rect(entity.x, entity.y - 10, entity.w, entity.h)
+        for tile in level.map:
+            if not isinstance(tile, Mario) and rect.colliderect(tile.rect):
+                entity.translate(0, entity.y - tile.y + entity.h)
+                entity.changeState("fall")
+                return
         
         # Update upward velocity.
         entity.dy += entity.velocity
-        entity.velocity += gravity
+        entity.velocity += jumpGravity
 
         # Start falling back down.
         if entity.velocity >= 0:
@@ -292,25 +305,23 @@ class MarioStateFall (State):
     def execute (self, entity, deltaTime):
         # Check in-air movement.
         key = pygame.key.get_pressed()
+        speed = entity.speed
 
+        if key[K_LSHIFT]:
+            speed *= 2
         if key[K_a]:
             entity.direction = "left"
-            self.dx = -(entity.speed)
+            self.dx = -speed
         if key[K_d]:
             entity.direction = "right"
-            self.dx = entity.speed
+            self.dx = speed
 
-        # Check if any collisions.
-        if (entity.hasCollision):
-            for obj in entity.collidingObjects:
-                if isinstance(obj, GroundBlock) or isinstance(obj, BrickBlock):
-                    entity.changeState("idle")
-                    # Place entity on top of obj.
-                    entity.translate(0, obj.y - entity.y - entity.h)
-
-            entity.hasCollision = False
-            entity.collidingObjects = []
-            return
+        rect = Rect(entity.x, entity.y + 10, entity.w, entity.h)
+        for tile in level.map:
+            if not isinstance(tile, Mario) and rect.colliderect(tile.rect):
+                entity.changeState("idle")
+                entity.translate(0, tile.y - entity.y - entity.h)
+                return
 
         if entity.dy > maxVelocity:
             entity.dy = maxVelocity
@@ -442,7 +453,7 @@ class Level:
 
     def draw (self):
         for tile in self.map:
-            pygame.draw.rect(screen, tile.color, [tile.x, tile.y, tile.w, tile.h], 6)
+            pygame.draw.rect(screen, tile.color, [tile.x - camera.x, tile.y - camera.y, tile.w, tile.h], 6)
 
 
 # 1-1
@@ -469,7 +480,7 @@ screenSize = [1280,720]
 screenBGColor = white
 
 # Tiles
-tileWidth = 40
+tileWidth = 50
 blankTile = ' '
 groundTile = 'g'
 marioTile = 'm'
