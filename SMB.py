@@ -212,6 +212,7 @@ class Koopa (Enemy):
         self.isDeadDead = False 
         self.velocity = 0
         self.dy = 0
+        self.inShell = False
 
     def update (self, deltaTime):
         if not self.isDeadDead:
@@ -454,7 +455,7 @@ class EnemyStateWait (State):
 
     def execute (self, entity, deltaTime):
         # Wait until player reaches some X position on the
-        # level before updating and drawing this goomba instance.
+        # level before updating and drawing this enemy instance.
         if level.getMario().x > entity.spawnX:
             entity.changeState("move")
 
@@ -547,9 +548,11 @@ class KoopaStateStomped (State):
     def enterState (self, entity):
         self.time = 0
         self.recoverTime = 5000 # five seconds
-        entity.y += entity.h/2
-        entity.h /= 2
-        entity.rect = Rect(entity.x, entity.y, entity.w, entity.h)
+        if entity.inShell == False:
+            entity.y += entity.h/2
+            entity.h /= 2
+            entity.rect = Rect(entity.x, entity.y, entity.w, entity.h)
+        entity.inShell = True
         entity.isDead = True
 
     def execute (self, entity, deltaTime):
@@ -558,6 +561,7 @@ class KoopaStateStomped (State):
         # Come back out of shell.
         if self.time > self.recoverTime:
             entity.isDead = False
+            entity.inShell = False
             entity.changeState("move")
             entity.y -= entity.h*2
             entity.h *= 2
@@ -575,6 +579,7 @@ class KoopaStateStomped (State):
                     else:
                         entity.direction = "left"
                     # Shoot shell.
+                    entity.isDead = False
                     entity.changeState("shellMove")
 
             entity.hasCollision = False
@@ -590,9 +595,9 @@ class KoopaStateShellMove (State):
 
     def execute (self, entity, deltaTime):
         if entity.direction == "left":
-            entity.translate(-(0.6 * deltaTime), 0)
+            entity.translate(-(0.8 * deltaTime), 0)
         else:
-            entity.translate(0.6 * deltaTime, 0)
+            entity.translate(0.8 * deltaTime, 0)
 
         # Check if should fall.
         shouldFall = should_fall(entity)
@@ -606,11 +611,8 @@ class KoopaStateShellMove (State):
                 
                 # That something was Mario.
                 if sides.top and isinstance(tile, Mario):
-                    entity.y -= entity.h*2
-                    entity.h *= 2
-                    entity.rect = Rect(entity.x, entity.y, entity.w, entity.h)
                     entity.changeState("stomped")
-                    
+                
                 if sides.left:
                     entity.setX(tile.x + tile.w)
                     entity.direction = "right"
