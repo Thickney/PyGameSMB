@@ -137,7 +137,7 @@ class Coin (Entity):
 class BrickBlock (Entity):
     def __init__ (self, x, y, w, h, color):
         Entity.__init__(self, x, y, w, h, color)
-        self.allStates = { "idle":BrickBlockStateIdle() } #, "hit_light":BrickBlockStateHitLight(), "hit_hard":BrickBlockStateHitHard() }   
+        self.allStates = { "idle":BrickBlockStateIdle(), "hitLight":BrickBlockStateHitLight() }#, "hit_hard":BrickBlockStateHitHard() }   
         self.prevState = self.allStates.get("idle")
         self.currState = self.prevState
         
@@ -643,7 +643,32 @@ class BrickBlockStateIdle (State):
         return
 
     def execute (self, entity, deltaTime):
+        if entity.hasCollision:
+            for tile in entity.collidingObjects:
+                # If Mario jumped up and collided with block.
+                if isinstance(tile, Mario) and tile.y > entity.y:
+                    entity.hasCollision = False
+                    entity.collidingObjects = []
+                    entity.changeState("hitLight")
+
+    def exitState(self, entity):
         return
+
+# BrickBlockStateHitLight
+class BrickBlockStateHitLight:
+    def enterState (self, entity):
+        self.done = False
+        self.startY = entity.y
+        self.maxY = entity.y - entity.h/2
+        self.step = -0.2
+
+    def execute (self, entity, deltaTime):
+        entity.setY(entity.y + self.step * deltaTime)
+        if entity.y <= self.maxY:
+            self.step *= -1
+        if entity.y >= self.startY:
+            entity.setY(self.startY)
+            entity.changeState("idle")
 
     def exitState(self, entity):
         return
