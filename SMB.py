@@ -16,6 +16,7 @@ gold = [255,215,0]
 groundBrown = [160,82,45]
 brickBrown = [205,133,63]
 
+goombaColor = [220, 110, 75]
 marioColor = white
 
 ####################################
@@ -81,6 +82,9 @@ class Entity (object):
         return self.y
     def setY (self, y):
         self.y = y
+        self.rect = Rect(self.x, self.y, self.w, self.h)
+    def setX (self, x):
+        self.x = x
         self.rect = Rect(self.x, self.y, self.w, self.h)
 
     def translate (self, dx, dy):
@@ -167,12 +171,22 @@ class Mushroom (Entity):
 
 # Goomba
 class Goomba (Entity):
-    def __init__ (self, x, y, w, h, color):
+    def __init__ (self, x, y, w, h, spawnX, color):
         Entity.__init__(self, x, y, w, h, color)
-        self.allStates = { "move":GoombaStateMove(), "fall":GoombaStateFall(), "hit":GoombaStateHit(), "squished":GoombaStateSquished() }
+        self.allStates = { "wait":GoombaStateWait(), "move":GoombaStateMove(), "fall":GoombaStateFall() }#, "hit":GoombaStateHit(), "squished":GoombaStateSquished() }
+        self.prevState = self.allStates.get("wait")
+        self.currState = self.prevState
+        self.spawnX = spawnX
+        self.direction = "left"
+        self.isSpawned = False
+        self.isDead = False
 
     def update (self, deltaTime):
         self.currState.execute(self, deltaTime)
+
+    def draw (self):
+        if self.isSpawned:
+            Entity.draw(self)
 
 # Pipe
 class Pipe (Entity):
@@ -241,17 +255,6 @@ class MarioStateMove (State):
     def execute (self, entity, deltaTime):
         key = pygame.key.get_pressed()
 
-        # Check for move into a wall
-        if entity.hasCollision:
-            for tile in entity.collidingObjects:
-                sides = collision_sides(entity.rect, tile.rect)
-                if sides.left:
-                    entity.x = tile.x + tile.w
-                elif sides.right:
-                    entity.x = tile.x - entity.w
-            entity.hasCollision = False
-            entity.collidingObjects = []
-
         # Check for move off of any platform
         shouldFall = should_fall(entity)
         
@@ -283,6 +286,17 @@ class MarioStateMove (State):
 
         if not key[K_a] and not key[K_d]:
             entity.changeState("idle")
+
+        # Check for move into a wall
+        if entity.hasCollision:
+            for tile in entity.collidingObjects:
+                sides = collision_sides(entity.rect, tile.rect)
+                if sides.left:
+                    entity.x = tile.x + tile.w
+                elif sides.right:
+                    entity.x = tile.x - entity.w
+            entity.hasCollision = False
+            entity.collidingObjects = []
  
     def exitState (self, entity):
         entity.hasCollision = False
@@ -379,6 +393,65 @@ class MarioStateFall (State):
         entity.hasCollision = False
         entity.collidingObjects = []
 
+# GoombaStateWait
+class GoombaStateWait (State):
+    def enterState (self, entity):
+        return
+
+    def execute (self, entity, deltaTime):
+        # Wait until player reaches some X position on the
+        # level before updating and drawing this goomba instance.
+        if level.getMario().x > entity.spawnX:
+            entity.changeState("move")
+
+    def exitState(self, entity):
+        entity.isSpawned = True
+
+# GoombaStateMove
+class GoombaStateMove (State):
+    def enterState (self, entity):
+        return
+
+    def execute (self, entity, deltaTime):
+        if entity.direction == "left":
+            entity.translate(-(0.1 * deltaTime), 0)
+        else:
+            entity.translate(0.1 * deltaTime, 0)
+
+        # Check if should fall.
+        shouldFall = should_fall(entity)
+        if shouldFall:
+            entity.changeState("fall")
+
+        # Check for move into a wall.
+        if entity.hasCollision:
+            for tile in entity.collidingObjects:
+                sides = collision_sides(entity.rect, tile.rect)
+                if sides.left:
+                    entity.setX(tile.x + tile.w)
+                    entity.direction = "right"
+                elif sides.right:
+                    entity.setX(tile.x - entity.w)
+                    entity.direction = "left"
+            entity.hasCollision = False
+            entity.collidingObjects = []
+
+        # Check for collision with player.
+
+    def exitState(self, entity):
+        return
+
+# GoombaStateFall
+class GoombaStateFall (State):
+    def enterState (self, entity):
+        return
+
+    def execute (self, entity, deltaTime):
+        return
+
+    def exitState(self, entity):
+        return
+
 # QuestionBlockStateIdle
 class QuestionBlockStateIdle (State):
     def enterState (self, entity):
@@ -418,7 +491,9 @@ class PipeStateIdle (State):
         return
 
     def execute (self, entity, deltaTime):
-        return
+        if entity.hasCollision:
+            entity.hasCollision = False
+            entity.collidingObjects = []
         
     def exitState(self, entity):
         return
@@ -476,6 +551,9 @@ class Level:
         elif (tile == pipeTile):
             self.map.append(Pipe(xPos, yPos, tileWidth, tileWidth, green))
 
+        elif (tile == goombaTile):
+            self.entities.append(Goomba(xPos, yPos, tileWidth, tileWidth, xPos - screenSize[0]/2, goombaColor))
+
     def update (self, deltaTime):
         for tile in self.map:
             tile.update(deltaTime)
@@ -485,13 +563,11 @@ class Level:
         self.checkCollisions()
 
     def checkCollisions (self):
-        mario = self.getMario()
-        if mario is None:
-            return
-        for tile in self.map:
-            if tile != mario and tile.rect.colliderect(mario.rect):
-                    tile.addCollision(mario)
-                    mario.addCollision(tile)
+        for entity in self.entities:
+            for tile in self.map:
+                if tile.rect.colliderect(entity.rect):
+                    entity.addCollision(tile)
+                    tile.addCollision(entity)
                 
     def getMario (self):
         for entity in self.entities:
@@ -512,10 +588,6 @@ class LevelOneOne (Level):
 
     def update (self, deltaTime):
         Level.update(self, deltaTime)
-        
-        # Handle stuff like trigger zones and where/when
-        # enemies should spawn and pipe tile collections.
-
         return
 
 
@@ -533,6 +605,7 @@ tileWidth = 50
 blankTile = ' '
 groundTile = 'g'
 marioTile = 'm'
+goombaTile = '@'
 pipeTile = 'p'
 blockTile = 'b'
 questionTile = 'q'
