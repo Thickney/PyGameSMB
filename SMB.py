@@ -173,7 +173,7 @@ class Mushroom (Entity):
 class Goomba (Entity):
     def __init__ (self, x, y, w, h, spawnX, color):
         Entity.__init__(self, x, y, w, h, color)
-        self.allStates = { "wait":GoombaStateWait(), "move":GoombaStateMove(), "fall":GoombaStateFall() }#, "hit":GoombaStateHit(), "squished":GoombaStateSquished() }
+        self.allStates = { "wait":GoombaStateWait(), "move":GoombaStateMove(), "fall":GoombaStateFall(), "squished":GoombaStateSquished() }
         self.prevState = self.allStates.get("wait")
         self.currState = self.prevState
         self.spawnX = spawnX
@@ -184,10 +184,11 @@ class Goomba (Entity):
         self.dy = 0
 
     def update (self, deltaTime):
-        self.currState.execute(self, deltaTime)
+        if not self.isDead:
+            self.currState.execute(self, deltaTime)
 
     def draw (self):
-        if self.isSpawned:
+        if self.isSpawned and not self.isDead:
             Entity.draw(self)
 
 # Pipe
@@ -336,9 +337,13 @@ class MarioStateJump (State):
                     entity.velocity = 0
                     entity.dy = 0
                 if sides.bottom:
-                    entity.setY(tile.top() - entity.h)
-                    entity.changeState("idle")
-                    return
+                    if isinstance(tile, Goomba):
+                        entity.dy = 0
+                        entity.velocity = -0.15
+                    else:
+                        entity.setY(tile.top() - entity.h)
+                        entity.changeState("idle")
+                        return
 
         # Don't go so fast that collisions are missed
         if entity.dy > maxVelocity:
@@ -379,9 +384,13 @@ class MarioStateFall (State):
             for tile in entity.collidingObjects:
                 sides = collision_sides(entity.rect, tile.rect)
                 if sides.bottom:
-                    entity.setY(tile.top() - entity.h)
-                    entity.changeState("idle")
-                    return  
+                    if isinstance(tile, Goomba):
+                        entity.dy = 0
+                        entity.velocity = -0.15
+                    else:
+                        entity.setY(tile.top() - entity.h)
+                        entity.changeState("idle")
+                        return
         
         if entity.dy > maxVelocity:
             entity.dy = maxVelocity
@@ -429,12 +438,15 @@ class GoombaStateMove (State):
         if entity.hasCollision:
             for tile in entity.collidingObjects:
                 sides = collision_sides(entity.rect, tile.rect)
+                if sides.top and isinstance(tile, Mario):
+                    entity.changeState("squished")
                 if sides.left:
                     entity.setX(tile.x + tile.w)
                     entity.direction = "right"
                 elif sides.right:
                     entity.setX(tile.x - entity.w)
                     entity.direction = "left"
+                
             entity.hasCollision = False
             entity.collidingObjects = []
 
@@ -461,6 +473,18 @@ class GoombaStateFall (State):
         # Check land
         if landed:
             entity.changeState("move")
+
+    def exitState(self, entity):
+        return
+
+# GoombaStateSquished
+class GoombaStateSquished (State):
+    def enterState (self, entity):
+        entity.isDead = True
+        level.removeEntity(entity)
+
+    def execute (self, entity, deltaTime):
+        return
 
     def exitState(self, entity):
         return
@@ -577,10 +601,24 @@ class Level:
 
     def checkCollisions (self):
         for entity in self.entities:
+            # Check Mario/Entity collisions.
+            if not isinstance(entity, Mario):
+                mario = self.getMario()
+                if entity.rect.colliderect(mario.rect):
+                    entity.addCollision(mario)
+                    mario.addCollision(entity)
+
+            # Check Entity/World collisions.
             for tile in self.map:
                 if tile.rect.colliderect(entity.rect):
                     entity.addCollision(tile)
                     tile.addCollision(entity)
+
+    def removeEntity (self, entity):
+        self.entities.remove(entity)
+
+    def removeTile (self, tile):
+        self.map.remove(tile)
                 
     def getMario (self):
         for entity in self.entities:
