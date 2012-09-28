@@ -202,7 +202,7 @@ class Goomba (Enemy):
 class Koopa (Enemy):
     def __init__ (self, x, y, w, h, spawnX, color):
         Enemy.__init__(self, x, y, w, h, color)
-        self.allStates = { "wait":EnemyStateWait(), "move":EnemyStateMove(), "fall":EnemyStateFall() } #, "shell":KoopaStateStomped(), "inShellMove":KoopaStateShellMove() }
+        self.allStates = { "wait":EnemyStateWait(), "move":EnemyStateMove(), "fall":EnemyStateFall(), "stomped":KoopaStateStomped(), "shellMove":KoopaStateShellMove() }
         self.prevState = self.allStates.get("wait")
         self.currState = self.prevState
         self.spawnX = spawnX
@@ -337,9 +337,9 @@ class MarioStateMove (State):
                     if not tile.isDead:
                         entity.isDead = True
                 if sides.left:
-                    entity.x = tile.x + tile.w
+                    entity.setX(tile.x + tile.w)
                 elif sides.right:
-                    entity.x = tile.x - entity.w
+                    entity.setX(tile.x - entity.w)
             entity.hasCollision = False
             entity.collidingObjects = []
  
@@ -371,6 +371,7 @@ class MarioStateJump (State):
             entity.direction = "right"
             self.dx = speed
 
+        # Check collisions.
         if entity.hasCollision:
             for tile in entity.collidingObjects:
                 sides = collision_sides(entity.rect, tile.rect)
@@ -546,22 +547,81 @@ class KoopaStateStomped (State):
     def enterState (self, entity):
         self.time = 0
         self.recoverTime = 5000 # five seconds
-        entity.inShell = True
         entity.y += entity.h/2
         entity.h /= 2
         entity.rect = Rect(entity.x, entity.y, entity.w, entity.h)
+        entity.isDead = True
 
     def execute (self, entity, deltaTime):
         self.time += deltaTime
 
+        # Come back out of shell.
         if self.time > self.recoverTime:
-            entity.inShell = False
+            entity.isDead = False
             entity.changeState("move")
+            entity.y -= entity.h*2
+            entity.h *= 2
+            entity.rect = Rect(entity.x, entity.y, entity.w, entity.h)
             return
 
         # Otherwise check for mario hitting it in some direction.
+        if entity.hasCollision:
+            for tile in entity.collidingObjects:
+                sides = collision_sides(entity.rect, tile.rect)
+                if isinstance(tile, Mario):
+                    # Decide which way to shoot shell.
+                    if tile.x <= entity.x:
+                        entity.direction = "right"
+                    else:
+                        entity.direction = "left"
+                    # Shoot shell.
+                    entity.changeState("shellMove")
+
+            entity.hasCollision = False
+            entity.collidingObjects = []
 
     def exitState (self, entity):
+        return
+
+# KoopaStateShellMove
+class KoopaStateShellMove (State):
+    def enterState (self, entity):
+        return
+
+    def execute (self, entity, deltaTime):
+        if entity.direction == "left":
+            entity.translate(-(0.6 * deltaTime), 0)
+        else:
+            entity.translate(0.6 * deltaTime, 0)
+
+        # Check if should fall.
+        shouldFall = should_fall(entity)
+        if shouldFall:
+            entity.changeState("fall")
+
+        # Check for move into something.
+        if entity.hasCollision:
+            for tile in entity.collidingObjects:
+                sides = collision_sides(entity.rect, tile.rect)
+                
+                # That something was Mario.
+                if sides.top and isinstance(tile, Mario):
+                    entity.y -= entity.h*2
+                    entity.h *= 2
+                    entity.rect = Rect(entity.x, entity.y, entity.w, entity.h)
+                    entity.changeState("stomped")
+                    
+                if sides.left:
+                    entity.setX(tile.x + tile.w)
+                    entity.direction = "right"
+                elif sides.right:
+                    entity.setX(tile.x - entity.w)
+                    entity.direction = "left"
+                
+            entity.hasCollision = False
+            entity.collidingObjects = []
+
+    def exitState(self, entity):
         return
 
 # QuestionBlockStateIdle
