@@ -79,6 +79,9 @@ class Entity (object):
         return self.y + self.h
     def top (self):
         return self.y
+    def setY (self, y):
+        self.y = y
+        self.rect = Rect(self.x, self.y, self.w, self.h)
 
     def translate (self, dx, dy):
         if dx < 0:
@@ -192,7 +195,6 @@ class Mario (Entity):
         self.speed = 0.5
         self.isDead = False
         self.dy = 0
-        self.jumpHeight = 150
         self.velocity = 0
         
     def update (self, deltaTime):
@@ -228,7 +230,8 @@ class MarioStateIdle (State):
             entity.changeState("move")
 
     def exitState (self, entity):
-        return
+        entity.hasCollision = False
+        entity.collidingObjects = []
 
 # MarioStateMove
 class MarioStateMove (State):
@@ -241,20 +244,17 @@ class MarioStateMove (State):
         # Check for move into a wall
         if entity.hasCollision:
             for tile in entity.collidingObjects:
-                sides = collision_sides(entity, tile)
+                sides = collision_sides(entity.rect, tile.rect)
                 if sides.left:
                     entity.x = tile.x + tile.w
                 elif sides.right:
                     entity.x = tile.x - entity.w
+            entity.hasCollision = False
+            entity.collidingObjects = []
 
         # Check for move off of any platform
-        downRect = entity.rect
-        downRect.y += 10
-        shouldFall = True
-        for item in level.map:
-            if item != entity and downRect.colliderect(item):
-                shouldFall = False
-
+        shouldFall = should_fall(entity)
+        
         if shouldFall:
             entity.changeState("fall")
 
@@ -285,7 +285,8 @@ class MarioStateMove (State):
             entity.changeState("idle")
  
     def exitState (self, entity):
-        return
+        entity.hasCollision = False
+        entity.collidingObjects = []
 
 # MarioStateJump
 class MarioStateJump (State):
@@ -311,31 +312,37 @@ class MarioStateJump (State):
             entity.direction = "right"
             self.dx = speed
 
-        rect = Rect(entity.x, entity.y - entity.w/3, entity.w, entity.h)
-        for tile in level.map:
-            if not isinstance(tile, Mario) and rect.colliderect(tile.rect):
-                entity.translate(0, entity.y - tile.y + entity.h)
-                entity.changeState("fall")
-                return
-        
-        # Update upward velocity.
-        entity.dy += entity.velocity
-        entity.velocity += jumpGravity
+        if entity.hasCollision:
+            for tile in entity.collidingObjects:
+                sides = collision_sides(entity.rect, tile.rect)
+                if sides.top:
+                    entity.setY(tile.bottom() + (entity.y - tile.y))
+                    entity.velocity = 0
+                    entity.dy = 0
+                if sides.bottom:
+                    entity.setY(tile.top() - entity.h)
+                    entity.changeState("idle")
+                    return
 
-        # Start falling back down.
-        if entity.velocity >= 0:
-            entity.changeState("fall")
+        # Don't go so fast that collisions are missed
+        if entity.dy > maxVelocity:
+            entity.dy = maxVelocity
         else:
-            entity.translate(self.dx * deltaTime, entity.dy * deltaTime)
+            entity.dy += entity.velocity
+        
+        entity.velocity += jumpGravity
+        entity.translate(self.dx * deltaTime, entity.dy * deltaTime)
 
     def exitState (self, entity):
-        return
+        entity.hasCollision = False
+        entity.collidingObjects = []
     
 
 # MarioStateFall
 class MarioStateFall (State):
     def enterState (self, entity):
         self.dx = 0
+        entity.velocity = 0
     
     def execute (self, entity, deltaTime):
         # Check in-air movement.
@@ -351,13 +358,15 @@ class MarioStateFall (State):
             entity.direction = "right"
             self.dx = speed
 
-        rect = Rect(entity.x, entity.y + 10, entity.w, entity.h)
-        for tile in level.map:
-            if not isinstance(tile, Mario) and rect.colliderect(tile.rect):
-                entity.changeState("idle")
-                entity.translate(0, tile.y - entity.y - entity.h)
-                return
-
+        # Check for landing
+        if entity.hasCollision:
+            for tile in entity.collidingObjects:
+                sides = collision_sides(entity.rect, tile.rect)
+                if sides.bottom:
+                    entity.setY(tile.top() - entity.h)
+                    entity.changeState("idle")
+                    return  
+        
         if entity.dy > maxVelocity:
             entity.dy = maxVelocity
         else:
@@ -367,7 +376,8 @@ class MarioStateFall (State):
         entity.translate(self.dx * deltaTime, entity.dy * deltaTime)
 
     def exitState (self, entity):
-        return
+        entity.hasCollision = False
+        entity.collidingObjects = []
 
 # QuestionBlockStateIdle
 class QuestionBlockStateIdle (State):
@@ -435,6 +445,7 @@ class Level:
         self.f = open(fileHandle)
         self.tileRows = self.f.readlines()
         self.map = []
+        self.entities = []
         i = 0
         for row in self.tileRows:
             j = 0
@@ -454,7 +465,7 @@ class Level:
             self.map.append(GroundBlock(xPos, yPos, tileWidth, tileWidth, groundBrown))
 
         elif (tile == marioTile):
-            self.map.append(Mario(xPos, yPos, tileWidth, tileWidth, white))
+            self.entities.append(Mario(xPos, yPos, tileWidth, tileWidth, white))
 
         elif (tile == blockTile):
             self.map.append(BrickBlock(xPos, yPos, tileWidth, tileWidth, brickBrown))
@@ -468,6 +479,8 @@ class Level:
     def update (self, deltaTime):
         for tile in self.map:
             tile.update(deltaTime)
+        for entity in self.entities:
+            entity.update(deltaTime)
         
         self.checkCollisions()
 
@@ -479,16 +492,18 @@ class Level:
             if tile != mario and tile.rect.colliderect(mario.rect):
                     tile.addCollision(mario)
                     mario.addCollision(tile)
-
+                
     def getMario (self):
-        for tile in self.map:
-            if tile.color == marioColor:
-                return tile
+        for entity in self.entities:
+            if isinstance(entity, Mario):
+                return entity
         return None
 
     def draw (self):
         for tile in self.map:
             tile.draw()
+        for entity in self.entities:
+            entity.draw()
 
 # 1-1
 class LevelOneOne (Level):
@@ -499,7 +514,7 @@ class LevelOneOne (Level):
         Level.update(self, deltaTime)
         
         # Handle stuff like trigger zones and where/when
-        # enemies should spawn.
+        # enemies should spawn and pipe tile collections.
 
         return
 
@@ -545,10 +560,10 @@ running = True
 def collision_sides (a, b):
     sides = Struct(left=False, right=False, top=False, bottom=False)
     
-    left = Rect(a.left(), a.top() + 1, 1, a.h - 2)
-    right = Rect(a.right(), a.top() + 1, 1, a.h - 2)
-    top = Rect(a.left() + 1, a.top(), a.w - 2, 1)
-    bottom = Rect(a.left() + 1, a.bottom(), a.w - 2, 1)
+    left = Rect(a.left, a.top + 1, 1, a.height - 2)
+    right = Rect(a.right, a.top + 1, 1, a.height - 2)
+    top = Rect(a.left + 1, a.top, a.w - 2, 1)
+    bottom = Rect(a.left + 1, a.bottom, a.width - 2, 1)
 
     if left.colliderect(b):
         sides.left = True
@@ -560,6 +575,13 @@ def collision_sides (a, b):
         sides.bottom = True
 
     return sides
+
+def should_fall (entity):
+    for tile in level.map:
+        sides = collision_sides(entity.rect, tile.rect)
+        if sides.bottom:
+            return False
+    return True
 
 def render ():
     screen.fill(screenBGColor)
