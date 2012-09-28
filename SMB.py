@@ -12,6 +12,7 @@ blue = [0,0,255]
 lightBlue = [135,206,250]
 white = [255,255,255]
 black = [0,0,0]
+grey = [150,150,150]
 gold = [255,215,0]
 groundBrown = [160,82,45]
 brickBrown = [205,133,63]
@@ -148,7 +149,7 @@ class BrickBlock (Entity):
 class QuestionBlock (Entity):
     def __init__ (self, x, y, w, h, color):
         Entity.__init__(self, x, y, w, h, color)
-        self.allStates = { "idle":QuestionBlockStateIdle() } #, "hit":QuestionBlockStateHit() }
+        self.allStates = { "idle":QuestionBlockStateIdle(), "hit":QuestionBlockStateHit() }
         self.prevState = self.allStates.get("idle")
         self.currState = self.prevState
 
@@ -632,9 +633,26 @@ class QuestionBlockStateIdle (State):
         return
 
     def execute (self, entity, deltaTime):
-        return
+        if entity.hasCollision:
+            for tile in entity.collidingObjects:
+                # If Mario jumped up and collided with block.
+                if isinstance(tile, Mario) and tile.y > abs(tile.x - entity.x) <= entity.w/2:
+                    entity.changeState("hit")
+            entity.hasCollision = False
+            entity.collidingObjects = []
 
     def exitState(self, entity):
+        return
+
+# QuestionBlockStateHit
+class QuestionBlockStateHit (State):
+    def enterState (self, entity):
+        entity.color = grey
+
+    def execute (self, entity, deltaTime):
+        return
+
+    def exitState (self, entity):
         return
 
 # BrickBlockStateIdle
@@ -646,10 +664,10 @@ class BrickBlockStateIdle (State):
         if entity.hasCollision:
             for tile in entity.collidingObjects:
                 # If Mario jumped up and collided with block.
-                if isinstance(tile, Mario) and tile.y > entity.y:
-                    entity.hasCollision = False
-                    entity.collidingObjects = []
+                if isinstance(tile, Mario) and tile.y > abs(tile.x - entity.x) <= entity.w/2:
                     entity.changeState("hitLight")
+            entity.hasCollision = False
+            entity.collidingObjects = []
 
     def exitState(self, entity):
         return
