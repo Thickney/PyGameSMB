@@ -180,6 +180,8 @@ class Goomba (Entity):
         self.direction = "left"
         self.isSpawned = False
         self.isDead = False
+        self.velocity = 0
+        self.dy = 0
 
     def update (self, deltaTime):
         self.currState.execute(self, deltaTime)
@@ -444,10 +446,21 @@ class GoombaStateMove (State):
 # GoombaStateFall
 class GoombaStateFall (State):
     def enterState (self, entity):
-        return
+        entity.velocity = 0
 
     def execute (self, entity, deltaTime):
-        return
+        # Update X
+        if entity.direction == "left":
+            entity.translate(-(0.1 * deltaTime), 0)
+        else:
+            entity.translate(0.1 * deltaTime, 0)
+
+        # Update Y
+        landed = updateFall(entity, deltaTime)
+
+        # Check land
+        if landed:
+            entity.changeState("move")
 
     def exitState(self, entity):
         return
@@ -655,6 +668,30 @@ def should_fall (entity):
         if sides.bottom:
             return False
     return True
+
+def updateFall (entity, deltaTime):
+    landed = False
+    
+    # Check for landing
+    if entity.hasCollision:
+        for tile in entity.collidingObjects:
+            sides = collision_sides(entity.rect, tile.rect)
+            if sides.bottom:
+                entity.setY(tile.top() - entity.h)
+                entity.changeState("idle")
+                entity.hasCollision = False
+                entity.collidingObjects = []
+                return True 
+    
+    if entity.dy > maxVelocity:
+        entity.dy = maxVelocity
+    else:
+        entity.dy += entity.velocity
+        
+    entity.velocity += gravity
+    entity.translate(0, entity.dy * deltaTime)
+
+    return landed
 
 def render ():
     screen.fill(screenBGColor)
