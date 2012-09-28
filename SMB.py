@@ -180,15 +180,16 @@ class Goomba (Entity):
         self.direction = "left"
         self.isSpawned = False
         self.isDead = False
+        self.isDeadDead = False #lulz
         self.velocity = 0
         self.dy = 0
 
     def update (self, deltaTime):
-        if not self.isDead:
+        if not self.isDeadDead:
             self.currState.execute(self, deltaTime)
 
     def draw (self):
-        if self.isSpawned and not self.isDead:
+        if self.isSpawned and not self.isDeadDead:
             Entity.draw(self)
 
 # Pipe
@@ -246,6 +247,14 @@ class MarioStateIdle (State):
             entity.direction = "right"
             entity.changeState("move")
 
+        if entity.hasCollision:
+            for tile in entity.collidingObjects:
+                sides = collision_sides(entity.rect, tile.rect)
+                if isinstance(tile, Goomba) and not tile.isDead and (sides.left or sides.right or sides.top):
+                    entity.isDead = True
+            entity.hasCollision = False
+            entity.collidingObjects = []
+
     def exitState (self, entity):
         entity.hasCollision = False
         entity.collidingObjects = []
@@ -290,10 +299,14 @@ class MarioStateMove (State):
         if not key[K_a] and not key[K_d]:
             entity.changeState("idle")
 
-        # Check for move into a wall
+        # Check for move into something.
         if entity.hasCollision:
             for tile in entity.collidingObjects:
                 sides = collision_sides(entity.rect, tile.rect)
+                if isinstance(tile, Goomba) and (sides.left or sides.right or sides.top):
+                    # If an enemy and still alive then hurt mario.
+                    if not tile.isDead:
+                        entity.isDead = True
                 if sides.left:
                     entity.x = tile.x + tile.w
                 elif sides.right:
@@ -337,7 +350,7 @@ class MarioStateJump (State):
                     entity.velocity = 0
                     entity.dy = 0
                 if sides.bottom:
-                    if isinstance(tile, Goomba):
+                    if isinstance(tile, Goomba) and not tile.isDead:
                         entity.dy = 0
                         entity.velocity = -0.15
                     else:
@@ -384,7 +397,7 @@ class MarioStateFall (State):
             for tile in entity.collidingObjects:
                 sides = collision_sides(entity.rect, tile.rect)
                 if sides.bottom:
-                    if isinstance(tile, Goomba):
+                    if isinstance(tile, Goomba) and not tile.isDead:
                         entity.dy = 0
                         entity.velocity = -0.15
                     else:
@@ -480,14 +493,23 @@ class GoombaStateFall (State):
 # GoombaStateSquished
 class GoombaStateSquished (State):
     def enterState (self, entity):
+        self.time = 0
+        self.squishTime = 1000 # one second
+        entity.y += entity.h/2
+        entity.h /= 2
+        entity.rect = Rect(entity.x, entity.y, entity.w, entity.h)
         entity.isDead = True
-        level.removeEntity(entity)
 
     def execute (self, entity, deltaTime):
-        return
+        self.time += deltaTime
+
+        # When time is up, switch to any state to remove goomba for good.
+        if self.time > self.squishTime:
+            entity.changeState("move")
 
     def exitState(self, entity):
-        return
+        entity.isDeadDead = True
+        level.removeEntity(entity)
 
 # QuestionBlockStateIdle
 class QuestionBlockStateIdle (State):
@@ -715,6 +737,11 @@ def updateFall (entity, deltaTime):
         for tile in entity.collidingObjects:
             sides = collision_sides(entity.rect, tile.rect)
             if sides.bottom:
+                # If entity fell on Mario then it's an enemy
+                # and this should trigger death or power-down in Mario.
+                if isinstance(tile, Mario):
+                    return
+                
                 entity.setY(tile.top() - entity.h)
                 entity.changeState("idle")
                 entity.hasCollision = False
@@ -758,7 +785,7 @@ while running:
 
     mario = level.getMario()
     #if not mario is None and mario.isDead:
-    if not mario is None and mario.y > screenSize[1]:
+    if not mario is None and (mario.y > screenSize[1] or mario.isDead):
         print "Game Over"
         running = False
 
