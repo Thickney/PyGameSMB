@@ -20,6 +20,11 @@ brickBrown = [205,133,63]
 koopaColor = [50, 205, 50]
 goombaColor = [220, 110, 75]
 marioColor = white
+mushroomColor = red
+starColor = gold
+coinColor = gold
+oneUpColor = [40, 230, 40]
+flowerColor = [200, 50, 10]
 
 ####################################
 # Classes
@@ -129,12 +134,18 @@ class Enemy (Entity):
 class Coin (Entity):
     def __init__ (self, x, y, w, h, color):
         Entity.__init__(self, x, y, w, h, color)
-        self.allStates = { "idle":CoinStateIdle(), "got":CoinStateGot() }
+        self.allStates = { "idle":CoinStateIdle(), "unused":CoinStateUnused() }
         self.prevState = self.allStates.get("idle")
         self.currState = self.prevState
+        self.active = False
 
     def update (self, deltaTime):
-        self.currState.execute(self, deltaTime)    
+        if self.active:
+            self.currState.execute(self, deltaTime)
+
+    def draw (self):
+        if self.active:
+            Entity.draw(self)    
 
 # BrickBlock
 class BrickBlock (Entity):
@@ -155,6 +166,7 @@ class QuestionBlock (Entity):
         self.prevState = self.allStates.get("idle")
         self.currState = self.prevState
         self.contents = contents
+        self.used = False
 
     def update (self, deltaTime):
         self.currState.execute(self, deltaTime)
@@ -174,10 +186,20 @@ class GroundBlock (Entity):
 class Mushroom (Entity):
     def __init__ (self, x, y, w, h, color):
         Entity.__init__(self, x, y, w, h, color)
-        self.allStates = { "spawn":MushroomStateSpawn(), "move":MushroomStateMove() }
+        self.allStates = { "spawn":MushroomStateSpawn(), "move":MushroomStateMove(), "fall":MushroomStateFall() }
+        self.prevState = self.allStates.get("spawn")
+        self.currState = self.prevState
+        self.active = False
+        self.dy = 0
+        self.velocity = 0
 
     def update (self, deltaTime):
-        self.currState.execute(self, deltaTime)
+        if self.active:
+            self.currState.execute(self, deltaTime)
+
+    def draw (self):
+        if self.active:
+            Entity.draw(self)
 
 # Goomba
 class Goomba (Enemy):
@@ -639,7 +661,7 @@ class QuestionBlockStateIdle (State):
         if entity.hasCollision:
             for tile in entity.collidingObjects:
                 # If Mario jumped up and collided with block.
-                if isinstance(tile, Mario) and tile.y > abs(tile.x - entity.x) <= entity.w/2:
+                if isinstance(tile, Mario) and tile.y > entity.y:
                     entity.changeState("hit")
             entity.hasCollision = False
             entity.collidingObjects = []
@@ -651,7 +673,22 @@ class QuestionBlockStateIdle (State):
 class QuestionBlockStateHit (State):
     def enterState (self, entity):
         entity.color = grey
+        if not entity.used:
+            entity.used = True
+            if entity.contents == "coin":
+                for obj in level.entities:
+                    if isinstance(obj, Coin):
+                        obj.setX(entity.x + 20)
+                        obj.setY(entity.y - tileWidth)
+                        obj.changeState("idle")
 
+            elif entity.contents == "mushroom":
+                for obj in level.entities:
+                    if isinstance(obj, Mushroom):
+                        obj.setX(entity.x)
+                        obj.setY(entity.y)
+                        obj.changeState("spawn")
+                    
     def execute (self, entity, deltaTime):
         return
 
@@ -668,7 +705,7 @@ class BrickBlockStateIdle (State):
             for tile in entity.collidingObjects:
                 sides = collision_sides(entity.rect, tile.rect)
                 # If Mario jumped up and collided with block.
-                if isinstance(tile, Mario) and tile.y > entity.y and abs(tile.x - entity.x) <= entity.w/2:
+                if isinstance(tile, Mario) and tile.y > entity.y:
                     entity.changeState("hitLight")
             entity.hasCollision = False
             entity.collidingObjects = []
@@ -722,7 +759,25 @@ class PipeStateIdle (State):
 # CoinStateIdle
 class CoinStateIdle (State):
     def enterState (self, entity):
-       return
+        entity.active = True
+        self.timer = 0
+        self.delay = 1000
+
+    def execute (self, entity, deltaTime):
+        self.timer += deltaTime
+
+        if self.timer > self.delay:
+            entity.changeState("unused")
+
+    def exitState(self, entity):
+        return
+
+# CoinStateUnused
+class CoinStateUnused (State):
+    def enterState (self, entity):
+       entity.setX(-100)
+       entity.setY(0)
+       entity.active = False
 
     def execute (self, entity, deltaTime):
         return
@@ -730,13 +785,81 @@ class CoinStateIdle (State):
     def exitState(self, entity):
         return
 
-# CoinStateGot
-class CoinStateGot (State):
+# MushroomStateSpawn
+class MushroomStateSpawn (State):
     def enterState (self, entity):
-       return
+       entity.active = True
+       self.startY = entity.y
 
     def execute (self, entity, deltaTime):
+        dy = 0.05 * deltaTime
+        entity.translate(0, -dy)
+        if entity.y <= self.startY - tileWidth:
+            entity.direction = "right"
+            entity.changeState("move")
+
+    def exitState(self, entity):
         return
+
+# MushroomStateMove
+class MushroomStateMove (State):
+    def enterState (self, entity):
+        return
+
+    def execute (self, entity, deltaTime):
+        if entity.direction == "left":
+            entity.translate(-(0.15 * deltaTime), 0)
+        else:
+            entity.translate(0.15 * deltaTime, 0)
+
+        # Check if should fall.
+        shouldFall = should_fall(entity)
+        if shouldFall:
+            entity.changeState("fall")
+
+        # Check for move into something.
+        if entity.hasCollision:
+            for tile in entity.collidingObjects:
+                sides = collision_sides(entity.rect, tile.rect)
+                
+                # That something was Mario.
+                if sides.top and isinstance(tile, Mario):
+                    entity.active = False
+                    entity.setX(-100)
+                    entity.setY(100)
+                    entity.changeState("spawn")
+                    
+                if sides.left:
+                    entity.setX(tile.x + tile.w)
+                    entity.direction = "right"
+                elif sides.right:
+                    entity.setX(tile.x - entity.w)
+                    entity.direction = "left"
+                
+            entity.hasCollision = False
+            entity.collidingObjects = []
+
+    def exitState(self, entity):
+        return
+
+# MushroomStateFall
+class MushroomStateFall (State):
+    def enterState (self, entity):
+        entity.velocity = 0
+
+    def execute (self, entity, deltaTime):
+        # Update X
+        if entity.direction == "left":
+            entity.translate(-(0.15 * deltaTime), 0)
+        else:
+            entity.translate(0.15 * deltaTime, 0)
+
+        # Update Y
+        landed = updateFall(entity, deltaTime)
+
+        # Check land
+        if landed:
+            entity.changeState("move")
 
     def exitState(self, entity):
         return
@@ -761,6 +884,13 @@ class Level:
                 j += 1
             i += 1
 
+        # Add reusable items.
+        self.entities.append(Coin(-100, 0, 10, 30, coinColor))
+        self.entities.append(Mushroom(-100, 100, tileWidth, tileWidth, mushroomColor))
+        #self.entities.append(Star(-100, 200, tileWidth, tileWidth, starColor))
+        #self.entities.append(OneUp(-100, 300, tileWidth, tileWidth, oneUpColor))
+        #self.entities.append(Flower(-100, 400, tileWidth, tileWidth, flowerColor))
+
     def loadItem (self, tile, x, y):
         xPos = x * tileWidth
         yPos = y * tileWidth
@@ -772,14 +902,16 @@ class Level:
             self.map.append(GroundBlock(xPos, yPos, tileWidth, tileWidth, groundBrown))
 
         elif (tile == marioTile):
-            self.entities.append(Mario(xPos, yPos, tileWidth, tileWidth, white))
+            self.entities.append(Mario(xPos, yPos+10, tileWidth-10, tileWidth-10, white))
 
         elif (tile == blockTile):
             self.map.append(BrickBlock(xPos, yPos, tileWidth, tileWidth, brickBrown))
 
         elif (tile == qCoinTile):
-            contents = Coin(xPos+20, yPos-40, 10, 30, gold)
-            self.map.append(QuestionBlock(xPos, yPos, tileWidth, tileWidth, contents, gold))
+            self.map.append(QuestionBlock(xPos, yPos, tileWidth, tileWidth, "coin", gold))
+
+        elif (tile == qMushTile):
+            self.map.append(QuestionBlock(xPos, yPos, tileWidth, tileWidth, "mushroom", gold))
 
         elif (tile == pipeTile):
             self.map.append(Pipe(xPos, yPos, tileWidth, tileWidth, green))
@@ -863,7 +995,7 @@ koopaTile = '#'
 pipeTile = 'p'
 blockTile = 'b'
 qCoinTile = '-'
-qPlusTile = '1'
+qMushTile = '1'
 qOneUpTile = '2'
 qStarTile = '3'
 
