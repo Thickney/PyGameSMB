@@ -129,7 +129,9 @@ class Enemy (Entity):
 class Coin (Entity):
     def __init__ (self, x, y, w, h, color):
         Entity.__init__(self, x, y, w, h, color)
-        self.allStates = { "idle":CoinStateIdle() }
+        self.allStates = { "idle":CoinStateIdle(), "got":CoinStateGot() }
+        self.prevState = self.allStates.get("idle")
+        self.currState = self.prevState
 
     def update (self, deltaTime):
         self.currState.execute(self, deltaTime)    
@@ -147,11 +149,12 @@ class BrickBlock (Entity):
 
 # QuestionBlock
 class QuestionBlock (Entity):
-    def __init__ (self, x, y, w, h, color):
+    def __init__ (self, x, y, w, h, contents, color):
         Entity.__init__(self, x, y, w, h, color)
         self.allStates = { "idle":QuestionBlockStateIdle(), "hit":QuestionBlockStateHit() }
         self.prevState = self.allStates.get("idle")
         self.currState = self.prevState
+        self.contents = contents
 
     def update (self, deltaTime):
         self.currState.execute(self, deltaTime)
@@ -663,8 +666,9 @@ class BrickBlockStateIdle (State):
     def execute (self, entity, deltaTime):
         if entity.hasCollision:
             for tile in entity.collidingObjects:
+                sides = collision_sides(entity.rect, tile.rect)
                 # If Mario jumped up and collided with block.
-                if isinstance(tile, Mario) and tile.y > abs(tile.x - entity.x) <= entity.w/2:
+                if isinstance(tile, Mario) and tile.y > entity.y and abs(tile.x - entity.x) <= entity.w/2:
                     entity.changeState("hitLight")
             entity.hasCollision = False
             entity.collidingObjects = []
@@ -726,6 +730,17 @@ class CoinStateIdle (State):
     def exitState(self, entity):
         return
 
+# CoinStateGot
+class CoinStateGot (State):
+    def enterState (self, entity):
+       return
+
+    def execute (self, entity, deltaTime):
+        return
+
+    def exitState(self, entity):
+        return
+
 ####################################
 # Levels
 ####################################
@@ -762,8 +777,9 @@ class Level:
         elif (tile == blockTile):
             self.map.append(BrickBlock(xPos, yPos, tileWidth, tileWidth, brickBrown))
 
-        elif (tile == questionTile):
-            self.map.append(QuestionBlock(xPos, yPos, tileWidth, tileWidth, gold))
+        elif (tile == qCoinTile):
+            contents = Coin(xPos+20, yPos-40, 10, 30, gold)
+            self.map.append(QuestionBlock(xPos, yPos, tileWidth, tileWidth, contents, gold))
 
         elif (tile == pipeTile):
             self.map.append(Pipe(xPos, yPos, tileWidth, tileWidth, green))
@@ -802,6 +818,9 @@ class Level:
 
     def removeTile (self, tile):
         self.map.remove(tile)
+
+    def addEntity (self, entity):
+        self.entities.append(entity)
                 
     def getMario (self):
         for entity in self.entities:
@@ -843,7 +862,10 @@ goombaTile = '@'
 koopaTile = '#'
 pipeTile = 'p'
 blockTile = 'b'
-questionTile = 'q'
+qCoinTile = '-'
+qPlusTile = '1'
+qOneUpTile = '2'
+qStarTile = '3'
 
 # Levels
 levelHandle = "1-1.txt"
